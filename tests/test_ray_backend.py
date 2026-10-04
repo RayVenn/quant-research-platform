@@ -2,7 +2,7 @@ import pytest
 
 ray = pytest.importorskip("ray")
 
-from pairlab.pipeline import run_job  # noqa: E402
+from quantlab.pipeline import run_job  # noqa: E402
 
 
 @pytest.mark.ray

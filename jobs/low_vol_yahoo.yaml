@@ -1,0 +1,19 @@
+# User-plugin example on free Yahoo data: `ref` points at a local Python file.
+name: low_vol_us_largecap
+description: Long-only low-volatility anomaly, inverse-vol weighted.
+data:
+  provider: yahoo
+  store: data/yahoo
+  symbols: [AAPL, MSFT, AMZN, GOOGL, META, NVDA, JPM, BAC, WFC, XOM, CVX, JNJ, PFE, MRK, PG, KO, PEP,
+            WMT, HD, MCD, DIS, V, MA, UNH, CSCO, INTC, ORCL, IBM, CAT, BA, GE, MMM, T, VZ, NKE, COST]
+  start: "2012-01-01"
+strategy:
+  ref: strategies/low_vol.py
+  grid:
+    vol_window: [21, 63, 126]
+    top_frac: [0.2, 0.3, 0.5]
+    rebalance: [5, 21]
+costs: {cost_bps: 2.0, delay: 1}
+execution: {backend: process}
+validation: {train_bars: 756, test_bars: 126}
+gates: {min_oos_sharpe: 0.3, min_dsr: 0.5, max_pbo: 0.5, max_oos_drawdown: -0.35}

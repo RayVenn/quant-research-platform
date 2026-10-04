@@ -1,0 +1,17 @@
+# Real data, free: moving-average trend following on sector/asset ETFs from Yahoo Finance.
+name: trend_etfs
+data:
+  provider: yahoo
+  store: data/yahoo
+  symbols: [SPY, QQQ, IWM, XLF, XLE, XLK, XLV, XLY, XLP, XLI, XLU, XLB]
+  start: "2010-01-01"
+strategy:
+  ref: ma_crossover
+  options: {long_short: false}
+  grid:
+    fast: [10, 20, 50]
+    slow: [100, 150, 200]
+costs: {cost_bps: 1.0, delay: 1}
+execution: {backend: local}
+validation: {train_bars: 756, test_bars: 252}
+gates: {min_oos_sharpe: 0.3, min_dsr: 0.5, max_pbo: 0.5, max_oos_drawdown: -0.35}

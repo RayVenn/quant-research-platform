@@ -14,12 +14,12 @@ from typing import Any
 
 import pandas as pd
 
-from pairlab.sweep.executors import Executor, make_executor
-from pairlab.sweep.spec import ExecutionSpec
-from pairlab.sweep.state import StateStore
-from pairlab.sweep.worker import execute_task, output_paths, outputs_exist
+from quantlab.sweep.executors import Executor, make_executor
+from quantlab.sweep.spec import ExecutionSpec
+from quantlab.sweep.state import StateStore
+from quantlab.sweep.worker import execute_task, output_paths, outputs_exist
 
-log = logging.getLogger("pairlab.sweep")
+log = logging.getLogger("quantlab.sweep")
 
 
 @dataclass
@@ -54,13 +54,13 @@ class Monitor:
             self.run_id, counts["succeeded"], self.total, counts["failed"], counts["running"], rate, eta,
         )
         lines = [
-            "# HELP pairlab_tasks Tasks by status",
-            "# TYPE pairlab_tasks gauge",
-            *(f'pairlab_tasks{{run_id="{self.run_id}",status="{k}"}} {v}' for k, v in counts.items()),
-            "# TYPE pairlab_backtests_per_second gauge",
-            f'pairlab_backtests_per_second{{run_id="{self.run_id}"}} {rate:.3f}',
-            "# TYPE pairlab_backtests_total counter",
-            f'pairlab_backtests_total{{run_id="{self.run_id}"}} {self.backtests_done}',
+            "# HELP quantlab_tasks Tasks by status",
+            "# TYPE quantlab_tasks gauge",
+            *(f'quantlab_tasks{{run_id="{self.run_id}",status="{k}"}} {v}' for k, v in counts.items()),
+            "# TYPE quantlab_backtests_per_second gauge",
+            f'quantlab_backtests_per_second{{run_id="{self.run_id}"}} {rate:.3f}',
+            "# TYPE quantlab_backtests_total counter",
+            f'quantlab_backtests_total{{run_id="{self.run_id}"}} {self.backtests_done}',
         ]
         tmp = self.run_dir / "metrics.prom.tmp"
         tmp.write_text("\n".join(lines) + "\n")
@@ -191,7 +191,7 @@ def run_tasks(
 
 
 def aggregate(state: StateStore, run_id: str, results_dir: str, out_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Concatenate per-task outputs into run-level metrics and portfolio-returns tables."""
+    """Concatenate per-task outputs into run-level per-combo metrics and returns tables."""
     metrics, returns = [], []
     for t in state.tasks(run_id, "succeeded"):
         m_path, r_path = output_paths(results_dir, t["task_id"])
@@ -199,9 +199,9 @@ def aggregate(state: StateStore, run_id: str, results_dir: str, out_dir: Path) -
         returns.append(pd.read_parquet(r_path))
     if not metrics:
         raise RuntimeError(f"run {run_id} has no successful tasks to aggregate")
-    m = pd.concat(metrics, ignore_index=True).sort_values(["combo_id", "pair"], ignore_index=True)
+    m = pd.concat(metrics, ignore_index=True).sort_values("combo_id", ignore_index=True)
     r = pd.concat(returns, axis=1).sort_index(axis=1)
     out_dir.mkdir(parents=True, exist_ok=True)
-    m.to_parquet(out_dir / "pair_metrics.parquet", index=False)
-    r.to_parquet(out_dir / "portfolio_returns.parquet")
+    m.to_parquet(out_dir / "combo_metrics.parquet", index=False)
+    r.to_parquet(out_dir / "returns.parquet")
     return m, r

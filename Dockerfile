@@ -12,8 +12,8 @@ RUN uv sync --frozen --no-dev --extra ray --extra s3 --no-install-project
 COPY src ./src
 COPY jobs ./jobs
 ARG CODE_VERSION=dev
-ENV PAIRLAB_CODE_VERSION=${CODE_VERSION} PAIRLAB_HOME=/workspace
+ENV QUANTLAB_CODE_VERSION=${CODE_VERSION} QUANTLAB_HOME=/workspace
 RUN uv sync --frozen --no-dev --extra ray --extra s3
 WORKDIR /workspace
-ENTRYPOINT ["pairlab"]
+ENTRYPOINT ["quantlab"]
 CMD ["--help"]
