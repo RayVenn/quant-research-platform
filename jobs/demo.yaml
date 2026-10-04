@@ -1,0 +1,40 @@
+# Demo job: runs against the synthetic store created by `make demo-data`.
+name: demo_pairs
+description: Synthetic universe — screen pairs, sweep params, walk-forward validate.
+data:
+  store: data/prices
+  periods_per_year: 252
+universe:
+  screen:
+    min_corr: 0.5
+    max_pvalue: 0.05
+    max_half_life: 60
+    max_pairs: 12
+    train_fraction: 0.4
+grid:
+  beta_window: [60, 120, 250]
+  z_window: [10, 20, 40]
+  entry_z: [1.0, 1.5, 2.0, 2.5]
+  exit_z: [0.0, 0.25, 0.5]
+  stop_z: [3.0, 4.0, 6.0]
+costs:
+  cost_bps: 1.0
+  delay: 1
+execution:
+  backend: process
+  combos_per_task: 12
+  max_retries: 2
+  retry_backoff_s: 0.5
+validation:
+  scheme: rolling
+  train_bars: 504
+  test_bars: 126
+  pbo_splits: 10
+  coint_pvalue: 0.10
+  min_coint_stability: 0.5
+gates:
+  min_oos_sharpe: 0.5
+  min_dsr: 0.90
+  max_pbo: 0.5
+  max_oos_drawdown: -0.25
+  min_pairs: 2

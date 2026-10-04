@@ -1,0 +1,36 @@
+# Production-scale sweep on Kubernetes via KubeRay. The operator creates an ephemeral Ray
+# cluster, runs the job, and tears the cluster down — no long-lived infrastructure to manage.
+#   kubectl apply -f deploy/k8s/rayjob.yaml
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  name: pairlab-sweep
+spec:
+  entrypoint: pairlab --home s3://pairlab-research run jobs/demo.yaml --backend ray
+  shutdownAfterJobFinishes: true
+  ttlSecondsAfterFinished: 600
+  rayClusterSpec:
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: "0.0.0.0"
+        num-cpus: "0"          # head only schedules; workers compute
+      template:
+        spec:
+          serviceAccountName: pairlab      # IRSA role with S3 access to prices/runs/registry
+          containers:
+            - name: ray-head
+              image: ghcr.io/rayvenn/pairlab:latest
+              resources: {requests: {cpu: "2", memory: 4Gi}}
+    workerGroupSpecs:
+      - groupName: cpu
+        replicas: 4
+        minReplicas: 0
+        maxReplicas: 64        # Ray autoscaler grows the pool with the task queue
+        rayStartParams: {}
+        template:
+          spec:
+            serviceAccountName: pairlab
+            containers:
+              - name: ray-worker
+                image: ghcr.io/rayvenn/pairlab:latest
+                resources: {requests: {cpu: "4", memory: 8Gi}, limits: {cpu: "4", memory: 8Gi}}

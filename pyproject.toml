@@ -1,0 +1,52 @@
+[project]
+name = "pairlab"
+version = "0.1.0"
+description = "Vectorized backtesting, distributed parameter sweeps, and model validation for pairs-trading strategies"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "pyarrow>=14.0",
+    "statsmodels>=0.14",
+    "scipy>=1.10",
+    "pydantic>=2.5",
+    "pyyaml>=6.0",
+    "fsspec>=2026.9.0",
+]
+
+[project.optional-dependencies]
+ray = ["ray[default]>=2.9"]
+s3 = ["s3fs>=2024.2"]
+
+[project.scripts]
+pairlab = "pairlab.cli:main"
+
+[dependency-groups]
+dev = [
+    # Ray in dev too: Ray re-launches workers via `uv run`, which only installs default groups.
+    "ray[default]>=2.9",
+    "pytest>=7.4",
+    "ruff>=0.4",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --tb=short --strict-markers"
+markers = [
+    "ray: requires the optional ray extra",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pairlab"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
