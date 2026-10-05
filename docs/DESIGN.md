@@ -18,7 +18,7 @@ The platform provides everything else:
 | Sweeps | Deterministic task planner; local / process / Ray executors |
 | Operations | Durable task state, retries, timeouts, crash recovery, resume, events, Prometheus metrics |
 | Validation | Walk-forward OOS, Deflated Sharpe, PBO, strategy-specific checks, promotion gates |
-| Hand-off | Versioned registry artifacts, `research → staging → production`, `quantlab signal` |
+| Hand-off | Versioned registry artifacts, `research → staging → production`, `uv run quantlab signal` |
 | Environments | `uv` lockfile, devcontainer, Docker image, docker-compose Ray, KubeRay RayJob |
 
 Non-goals for now: tick/order-book simulation, live order routing, a web UI.
@@ -105,7 +105,7 @@ truncated prefixes (50%, 80%). Weights on the shared prefix must be identical. A
 `shift(-1)`, full-sample normalization, or centered window fails the run before compute
 is spent. The audit also records gross-exposure stats, which catches leverage bugs. A
 real example during development: a forward-filled weight table that kept stale names
-showed gross 1.9 instead of 1.0. `quantlab strategy check` runs the audit interactively.
+showed gross 1.9 instead of 1.0. `uv run quantlab strategy check` runs the audit interactively.
 
 **Security.** Plugins are arbitrary Python. That is appropriate for a trusted research
 team. Workers run in containers with only the data and run-output credentials they
@@ -186,7 +186,7 @@ lease, and resumes are therefore all safe.
   - `events.jsonl`: structured log per run.
   - `metrics.prom`: progress, failures and throughput, for the Prometheus textfile
     collector or a pushgateway.
-  - `quantlab status`: progress, ETA, failing tasks with errors, recent events.
+  - `uv run quantlab status`: progress, ETA, failing tasks with errors, recent events.
   - The Ray dashboard, for clusters.
 
 ## 7. Validation: why a sweep winner is not a strategy
@@ -232,7 +232,7 @@ Promotion goes `research → staging → production`, one stage at a time:
 - Rollback is promoting the previous version.
 - Staging is for paper trading. Production is what live systems read.
 
-`quantlab signal <name>` is the production hand-off. It:
+`uv run quantlab signal <name>` is the production hand-off. It:
 
 1. Loads the production artifact.
 2. Optionally refreshes bars from the artifact's provider.
@@ -243,12 +243,13 @@ Execution (OMS/EMS) consumes those targets. The platform never routes orders its
 
 ## 9. Provisioning: days → minutes
 
-- **Laptop.** `make setup`: `uv` installs a pinned Python and the locked dependencies in
-  about a minute. A devcontainer is included.
-- **Single box or CI.** `make demo` and `make test` run fully offline on synthetic data.
+- **Laptop.** `uv sync --extra ray` installs a pinned Python and the locked dependencies
+  in about a minute. A devcontainer is included.
+- **Single box or CI.** `uv run pytest` and the demo job (`uv run quantlab data synth`,
+  then `uv run quantlab run jobs/demo.yaml`) run fully offline on synthetic data.
 - **Cluster.**
-  - `make cluster-up WORKERS=n` starts a Ray head and workers with docker-compose, from
-    the same image.
+  - `docker compose up -d --build --scale ray-worker=n ray-head ray-worker` starts a Ray
+    head and workers from the same image.
   - `deploy/k8s/rayjob.yaml` creates an ephemeral, autoscaling KubeRay cluster per sweep
     and tears it down afterwards.
 - **Researcher experience.** Researchers write a plugin and a YAML file. They never

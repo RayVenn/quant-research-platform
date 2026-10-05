@@ -18,7 +18,7 @@ strategy as a small Python plugin and a YAML job. The platform handles everythin
   Backtest Overfitting (CSCV), plus strategy-specific checks (e.g. cointegration stability
   for pairs). All of it feeds explicit promotion gates.
 - **Research → production.** Versioned artifacts (code hash and source, params, data
-  fingerprint, validation) move `research → staging → production`. `quantlab signal`
+  fingerprint, validation) move `research → staging → production`. `uv run quantlab signal`
   turns the production artifact into today's target weights.
 
 Equities are the first asset class. Strategies only see a `MarketData` panel and return
@@ -29,18 +29,27 @@ See **[docs/DESIGN.md](docs/DESIGN.md)** for the architecture.
 ## Quick start
 
 ```bash
-make setup        # uv installs Python + locked dependencies (~1 min)
-make demo         # offline: synthetic data → pairs strategy → sweep → validate → register
-make demo-yahoo   # real, free Yahoo data: momentum, trend, and a user plugin
-make test
+uv sync --extra ray                                # Python + locked dependencies (~1 min)
+
+# offline: synthetic data → pairs strategy → sweep → validate → register
+uv run quantlab data synth --store data/prices
+uv run quantlab run jobs/demo.yaml
+
+# real, free Yahoo data: built-in momentum + trend, and a user plugin
+uv run quantlab run jobs/momentum_yahoo.yaml
+uv run quantlab run jobs/trend_yahoo.yaml
+uv run quantlab run jobs/low_vol_yahoo.yaml
+
+uv run ruff check src tests strategies
+uv run pytest
 ```
 
 ## Write a strategy
 
 ```bash
-quantlab strategy new my_reversion      # creates strategies/my_reversion.py + jobs/my_reversion.yaml
-quantlab strategy check jobs/my_reversion.yaml   # fetch data, fit, lookahead audit
-quantlab run jobs/my_reversion.yaml
+uv run quantlab strategy new my_reversion      # creates strategies/my_reversion.py + jobs/my_reversion.yaml
+uv run quantlab strategy check jobs/my_reversion.yaml   # fetch data, fit, lookahead audit
+uv run quantlab run jobs/my_reversion.yaml
 ```
 
 A strategy maps market data and one parameter set to target weights (bars × symbols):
@@ -92,11 +101,11 @@ weights change.
 ## Data
 
 ```bash
-quantlab data providers
-quantlab data fetch --symbols AAPL MSFT SPY --store data/yahoo --start 2015-01-01
-quantlab data fetch --symbols-file universe.txt --store data/yahoo --refresh
-quantlab data import-csv prices.csv --store data/mine --format long   # ts,symbol,close[,open,high,low,volume]
-quantlab data list --store data/yahoo
+uv run quantlab data providers
+uv run quantlab data fetch --symbols AAPL MSFT SPY --store data/yahoo --start 2015-01-01
+uv run quantlab data fetch --symbols-file universe.txt --store data/yahoo --refresh
+uv run quantlab data import-csv prices.csv --store data/mine --format long   # ts,symbol,close[,open,high,low,volume]
+uv run quantlab data list --store data/yahoo
 ```
 
 Jobs with `data.provider: yahoo` fetch missing symbols automatically on the first run. Later
@@ -107,14 +116,14 @@ registering it under the `quantlab.data_providers` entry point (or pass `module:
 ## Run, monitor, recover, promote
 
 ```bash
-quantlab run jobs/momentum_yahoo.yaml --backend process --workers 8
-quantlab status                                  # progress, retries, errors, recent events
-quantlab resume <run_id> --retry-failed          # continue after a crash / failure
-quantlab registry list
-quantlab registry promote <name> <run_id> --stage staging
-quantlab registry promote <name> <run_id> --stage production   # blocked if validation failed
-quantlab signal <name>                           # today's target weights from the production artifact
-quantlab signal <name> --refresh                 # pull fresh bars first
+uv run quantlab run jobs/momentum_yahoo.yaml --backend process --workers 8
+uv run quantlab status                                  # progress, retries, errors, recent events
+uv run quantlab resume <run_id> --retry-failed          # continue after a crash / failure
+uv run quantlab registry list
+uv run quantlab registry promote <name> <run_id> --stage staging
+uv run quantlab registry promote <name> <run_id> --stage production   # blocked if validation failed
+uv run quantlab signal <name>                           # today's target weights from the production artifact
+uv run quantlab signal <name> --refresh                 # pull fresh bars first
 ```
 
 Run outputs live in `runs/<run_id>/`:
@@ -130,9 +139,11 @@ Run outputs live in `runs/<run_id>/`:
 ## Cluster
 
 ```bash
-make cluster-up WORKERS=4      # Ray head + workers via docker-compose
-make cluster-demo
+docker compose up -d --build --scale ray-worker=4 ray-head ray-worker   # Ray head + workers
+docker compose run --rm quantlab data synth --store /workspace/data/prices
+docker compose run --rm quantlab run jobs/demo.yaml --backend ray
+docker compose down
 kubectl apply -f deploy/k8s/rayjob.yaml   # ephemeral autoscaling KubeRay cluster per sweep
 ```
 
-Fault injection for testing recovery: `QUANTLAB_CHAOS_FAIL_RATE=0.3 quantlab run …`.
+Fault injection for testing recovery: `QUANTLAB_CHAOS_FAIL_RATE=0.3 uv run quantlab run …`.

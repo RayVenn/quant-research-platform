@@ -1,4 +1,5 @@
-# Local research cluster: `make cluster-up WORKERS=4`, then `make cluster-demo`.
+# Local research cluster: `docker compose up -d --build --scale ray-worker=4 ray-head ray-worker`,
+# then `docker compose run --rm quantlab run jobs/demo.yaml --backend ray`.
 # Everything shares one /workspace volume (price store, run state, results, registry);
 # in the cloud the same layout lives on S3 + a managed DB and the cluster on KubeRay.
 x-quantlab: &quantlab

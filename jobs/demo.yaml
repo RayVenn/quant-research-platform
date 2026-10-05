@@ -1,4 +1,4 @@
-# Offline demo: built-in pairs strategy on the synthetic store from `make demo-data`.
+# Offline demo: built-in pairs strategy on the synthetic store from `uv run quantlab data synth --store data/prices`.
 name: demo_pairs
 description: Synthetic universe — screen pairs, sweep params, walk-forward validate.
 data:
