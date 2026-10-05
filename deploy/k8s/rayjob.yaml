@@ -4,9 +4,9 @@
 apiVersion: ray.io/v1
 kind: RayJob
 metadata:
-  name: pairlab-sweep
+  name: quantlab-sweep
 spec:
-  entrypoint: pairlab --home s3://pairlab-research run jobs/demo.yaml --backend ray
+  entrypoint: quantlab --home s3://quantlab-research run jobs/demo.yaml --backend ray
   shutdownAfterJobFinishes: true
   ttlSecondsAfterFinished: 600
   rayClusterSpec:
@@ -16,10 +16,10 @@ spec:
         num-cpus: "0"          # head only schedules; workers compute
       template:
         spec:
-          serviceAccountName: pairlab      # IRSA role with S3 access to prices/runs/registry
+          serviceAccountName: quantlab      # IRSA role with S3 access to prices/runs/registry
           containers:
             - name: ray-head
-              image: ghcr.io/rayvenn/pairlab:latest
+              image: ghcr.io/rayvenn/quantlab:latest
               resources: {requests: {cpu: "2", memory: 4Gi}}
     workerGroupSpecs:
       - groupName: cpu
@@ -29,8 +29,8 @@ spec:
         rayStartParams: {}
         template:
           spec:
-            serviceAccountName: pairlab
+            serviceAccountName: quantlab
             containers:
               - name: ray-worker
-                image: ghcr.io/rayvenn/pairlab:latest
+                image: ghcr.io/rayvenn/quantlab:latest
                 resources: {requests: {cpu: "4", memory: 8Gi}, limits: {cpu: "4", memory: 8Gi}}

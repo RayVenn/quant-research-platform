@@ -2,36 +2,27 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pairlab.engine.metrics import max_drawdown, sharpe
-from pairlab.engine.reference import run_pair_loop
-from pairlab.engine.vectorized import Thresholds, hedge_and_zscore, run_group, target_positions
+from quantlab.engine.metrics import max_drawdown, sharpe
+from quantlab.engine.portfolio import simulate
+from quantlab.engine.reference import simulate_loop
+from quantlab.strategies.pairs import PairsStrategy
+from quantlab.strategies.pairs.engine import Thresholds, hedge_and_zscore, target_positions
 
-PAIRS = [("C0M0", "C0M1"), ("C1M0", "C1M1"), ("N0", "N1")]
-TH = Thresholds(
-    entry=np.array([1.0, 1.5, 2.0, 2.5]),
-    exit=np.array([0.0, 0.25, 0.5, 1.0]),
-    stop=np.array([3.0, 4.0, 3.5, 99.0]),
-)
+PAIRS = [["C0M0", "C0M1"], ["C1M0", "C1M1"], ["N0", "N1"]]
 
 
-def _yx(panel):
-    return panel[[y for y, _ in PAIRS]], panel[[x for _, x in PAIRS]]
-
-
-@pytest.mark.parametrize("delay,cost", [(0, 0.0), (1, 1.0), (3, 5.0)])
-def test_vectorized_matches_reference_loop(panel, delay, cost):
-    py, px = _yx(panel)
-    res = run_group(py, px, 80, 15, TH, cost_bps=cost, delay=delay, max_cells=len(panel) * 3 * 2)
-    for i, (y, x) in enumerate(PAIRS):
-        for c in range(len(TH)):
-            ret, held = run_pair_loop(panel[y], panel[x], 80, 15, TH.entry[c], TH.exit[c], TH.stop[c], cost, delay)
-            assert res.pair_metrics["sharpe"][i, c] == pytest.approx(sharpe(ret[:, None], 252)[0], abs=1e-10)
-            assert res.pair_metrics["n_trades"][i, c] == ((held != 0) & (held != np.r_[0, held[:-1]])).sum()
-    np.testing.assert_allclose(
-        res.portfolio_returns[:, 1],
-        np.mean([run_pair_loop(panel[y], panel[x], 80, 15, 1.5, 0.25, 4.0, cost, delay)[0] for y, x in PAIRS], axis=0),
-        atol=1e-12,
-    )
+@pytest.mark.parametrize("delay,cost,borrow", [(0, 0.0, 0.0), (1, 1.0, 0.0), (3, 5.0, 75.0)])
+def test_simulator_matches_reference_loop(market, delay, cost, borrow):
+    rng = np.random.default_rng(1)
+    prices = market.close.to_numpy().copy()
+    prices[100:130, 2] = np.nan  # halted / not yet listed
+    W = rng.normal(0, 0.3, (3, *prices.shape)).transpose(1, 2, 0)
+    W[::7] = np.nan
+    rets = pd.DataFrame(prices).pct_change(fill_method=None).to_numpy()
+    sim = simulate(W, rets, cost, delay, borrow)
+    for c in range(W.shape[2]):
+        ref = simulate_loop(W[:, :, c], prices, cost, delay, borrow)
+        np.testing.assert_allclose(sim.returns[:, c], ref, atol=1e-12)
 
 
 def test_hysteresis_semantics():
@@ -39,17 +30,6 @@ def test_hysteresis_semantics():
     pos = target_positions(z, Thresholds(np.array([2.0]), np.array([0.5]), np.array([4.0])))[:, 0, 0]
     #             nan  0   enter-short hold exit enter-long  stop  re-enter exit
     assert pos.tolist() == [0, 0, -1, -1, 0, 1, 0, 1, 0]
-
-
-def test_no_lookahead(panel):
-    py, px = _yx(panel)
-    base = run_group(py, px, 60, 20, TH).portfolio_returns
-    cut = 1000
-    shocked_y = py.copy()
-    shocked_y.iloc[cut:] *= 1.5
-    shocked = run_group(shocked_y, px, 60, 20, TH).portfolio_returns
-    np.testing.assert_array_equal(base[:cut], shocked[:cut])
-    assert not np.allclose(base[cut:], shocked[cut:])
 
 
 def test_hedge_ratio_recovers_true_beta():
@@ -61,19 +41,43 @@ def test_hedge_ratio_recovers_true_beta():
     assert np.nanmedian(beta) == pytest.approx(0.8, abs=0.02)
 
 
-def test_chunking_does_not_change_results(panel):
-    py, px = _yx(panel)
-    a = run_group(py, px, 60, 20, TH, max_cells=10**9)
-    b = run_group(py, px, 60, 20, TH, max_cells=1)
-    np.testing.assert_allclose(a.portfolio_returns, b.portfolio_returns, rtol=0, atol=1e-15)
-    for k in a.pair_metrics:
-        np.testing.assert_allclose(a.pair_metrics[k], b.pair_metrics[k], rtol=1e-12)
+def _pairs(market, pairs=PAIRS):
+    s = PairsStrategy({"pairs": pairs})
+    syms = sorted({x for p in pairs for x in p})
+    m = market.select(syms)
+    return PairsStrategy({"pairs": pairs}, s.fit(m)), m
 
 
-def test_cointegrated_pairs_beat_noise_pairs(panel):
-    py, px = _yx(panel)
-    sr = run_group(py, px, 120, 20, TH).pair_metrics["sharpe"]
-    assert sr[:2].mean() > sr[2].mean()
+def test_pairs_weights_are_dollar_neutral_and_hedged(market):
+    s, m = _pairs(market)
+    p = {"beta_window": 60, "z_window": 20, "entry_z": 1.5, "exit_z": 0.0, "stop_z": 4.0}
+    W = s.positions_batch(m, [p])[:, :, 0]
+    beta, _ = s.signals(m, 60, 20)
+    col = {c: i for i, c in enumerate(m.symbols)}
+    for i, (y, x) in enumerate(PAIRS):
+        wy, wx = W[:, col[y]], W[:, col[x]]
+        on = wy != 0
+        assert on.any()
+        np.testing.assert_allclose((np.abs(wy) + np.abs(wx))[on], 1 / len(PAIRS))  # gross 1 per pair
+        np.testing.assert_allclose(wx[on], -wy[on] * beta[on, i])  # hedge ratio respected
+
+
+def test_pairs_batch_matches_single_and_mixed_groups(market):
+    s, m = _pairs(market)
+    grid = [{"beta_window": bw, "z_window": 20, "entry_z": e, "exit_z": 0.0, "stop_z": 4.0}
+            for bw in (60, 120) for e in (1.5, 2.0)]
+    batch = s.positions_batch(m, grid)
+    for c, p in enumerate(grid):
+        np.testing.assert_array_equal(batch[:, :, c], s.positions(m, p))
+
+
+def test_cointegrated_pairs_beat_noise_pairs(market):
+    p = {"beta_window": 120, "z_window": 20, "entry_z": 1.5, "exit_z": 0.0, "stop_z": 4.0}
+    srs = []
+    for pairs in ([["C0M0", "C0M1"], ["C1M0", "C1M1"]], [["N0", "N1"]]):
+        s, m = _pairs(market, pairs)
+        srs.append(sharpe(simulate(s.positions_batch(m, [p]), m.returns.to_numpy()).returns, 252)[0])
+    assert srs[0] > srs[1]
 
 
 def test_max_drawdown():

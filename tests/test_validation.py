@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from pairlab.validation.stats import deflated_sharpe, effective_trials, pbo_cscv, probabilistic_sharpe
-from pairlab.validation.walkforward import make_folds
+from quantlab.validation.stats import deflated_sharpe, effective_trials, pbo_cscv, probabilistic_sharpe
+from quantlab.validation.walkforward import make_folds
 
 
 def test_folds_rolling_and_expanding():

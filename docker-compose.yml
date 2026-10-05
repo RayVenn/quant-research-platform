@@ -1,25 +1,25 @@
 # Local research cluster: `make cluster-up WORKERS=4`, then `make cluster-demo`.
 # Everything shares one /workspace volume (price store, run state, results, registry);
 # in the cloud the same layout lives on S3 + a managed DB and the cluster on KubeRay.
-x-pairlab: &pairlab
+x-quantlab: &quantlab
   build: .
-  image: pairlab:latest
+  image: quantlab:latest
   volumes:
     - workspace:/workspace
   shm_size: 2gb
 
 services:
   ray-head:
-    <<: *pairlab
+    <<: *quantlab
     entrypoint: ["ray", "start", "--head", "--port=6379", "--dashboard-host=0.0.0.0", "--num-cpus=1", "--block"]
     ports:
       - "8265:8265"   # Ray dashboard: live task/worker monitoring
   ray-worker:
-    <<: *pairlab
+    <<: *quantlab
     entrypoint: ["ray", "start", "--address=ray-head:6379", "--block"]
     depends_on: [ray-head]
-  pairlab:
-    <<: *pairlab
+  quantlab:
+    <<: *quantlab
     profiles: ["cli"]
     environment:
       RAY_ADDRESS: ray-head:6379

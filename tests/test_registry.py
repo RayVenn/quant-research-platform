@@ -1,6 +1,6 @@
 import pytest
 
-from pairlab.registry.store import Registry, RegistryError
+from quantlab.registry.store import Registry, RegistryError
 
 
 def _art(version, passed=True):

@@ -1,11 +1,11 @@
-"""Declarative job specification — the single, standardized way to describe a research run."""
+"""Declarative job specification: the one standard way to describe a research run."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -17,48 +17,40 @@ class _Model(BaseModel):
 
 class DataSpec(_Model):
     store: str = Field(description="PriceStore root (local path or fsspec URI such as s3://bucket/prices)")
-    symbols: list[str] | None = None
+    provider: str | None = Field(None, description="Fetch missing symbols from this provider (e.g. 'yahoo')")
+    provider_options: dict[str, Any] = {}
+    symbols: list[str] | None = Field(None, description="Universe; default = every symbol in the store")
     start: str | None = None
     end: str | None = None
+    interval: str = "1d"
     periods_per_year: float = 252.0
 
 
-class ScreenSpec(_Model):
-    min_corr: float = 0.7
-    max_pvalue: float = 0.05
-    max_half_life: float = 60.0
-    max_pairs: int = 20
-    train_fraction: float = Field(0.4, gt=0, le=1, description="Screen only on the leading part of history")
-
-
-class UniverseSpec(_Model):
-    pairs: list[tuple[str, str]] | None = None
-    screen: ScreenSpec | None = None
+class StrategySpec(_Model):
+    ref: str = Field(description="built-in name | installed plugin | module:Class | path/to/file.py[:Class]")
+    options: dict[str, Any] = Field({}, description="Fixed (not swept) strategy configuration")
+    grid: dict[str, list[Any]] = Field(description="Swept parameters: name -> candidate values")
+    fit_fraction: float = Field(0.4, gt=0, le=1, description="Leading share of history passed to Strategy.fit")
 
     @model_validator(mode="after")
-    def _one_source(self) -> UniverseSpec:
-        if not self.pairs and self.screen is None:
-            self.screen = ScreenSpec()
+    def _nonempty(self) -> StrategySpec:
+        empty = [k for k, v in self.grid.items() if not v]
+        if not self.grid or empty:
+            raise ValueError(f"strategy.grid needs at least one value per parameter (empty: {empty})")
         return self
 
 
-class GridSpec(_Model):
-    beta_window: list[int]
-    z_window: list[int]
-    entry_z: list[float]
-    exit_z: list[float]
-    stop_z: list[float]
-
-
 class CostSpec(_Model):
-    cost_bps: float = 1.0
+    cost_bps: float = Field(1.0, description="Commission + slippage per unit of traded notional")
     delay: int = Field(1, ge=0, description="Bars between signal and fill")
+    borrow_bps: float = Field(0.0, description="Annual borrow cost on short notional")
 
 
 class ExecutionSpec(_Model):
     backend: Literal["local", "process", "ray"] = "process"
     max_workers: int | None = None
     combos_per_task: int = 200
+    max_cells: int = Field(20_000_000, description="Bound on T×N×C cells per engine pass (memory)")
     max_retries: int = 2
     retry_backoff_s: float = 1.0
     task_timeout_s: float | None = None
@@ -69,10 +61,8 @@ class ValidationSpec(_Model):
     scheme: Literal["rolling", "expanding"] = "rolling"
     train_bars: int = 504
     test_bars: int = 126
-    warmup_bars: int | None = Field(None, description="Bars skipped before the first fold (default: max window)")
+    warmup_bars: int | None = Field(None, description="Bars skipped before the first fold (default: Strategy.warmup)")
     pbo_splits: int = 10
-    coint_pvalue: float = 0.10
-    min_coint_stability: float = 0.5
 
 
 class GateSpec(_Model):
@@ -80,15 +70,13 @@ class GateSpec(_Model):
     min_dsr: float = 0.90
     max_pbo: float = 0.5
     max_oos_drawdown: float = -0.25
-    min_pairs: int = 2
 
 
 class JobSpec(_Model):
     name: str = Field(pattern=r"^[a-zA-Z0-9_\-]+$")
     description: str = ""
     data: DataSpec
-    universe: UniverseSpec = UniverseSpec()
-    grid: GridSpec
+    strategy: StrategySpec
     costs: CostSpec = CostSpec()
     execution: ExecutionSpec = ExecutionSpec()
     validation: ValidationSpec = ValidationSpec()

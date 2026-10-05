@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from pairlab.engine import metrics as M
+from quantlab.engine import metrics as M
 
 
 @dataclass(frozen=True)

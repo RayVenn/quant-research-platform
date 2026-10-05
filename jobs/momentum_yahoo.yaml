@@ -1,0 +1,22 @@
+# Real data, free: cross-sectional 12-1 momentum on large-cap US equities from Yahoo Finance.
+# First run downloads bars into data/yahoo (cached as Parquet; later runs are offline).
+name: momentum_us_largecap
+description: Cross-sectional momentum, long top / short bottom quantile, monthly rebalance.
+data:
+  provider: yahoo
+  store: data/yahoo
+  symbols: [AAPL, MSFT, AMZN, GOOGL, META, NVDA, JPM, BAC, WFC, XOM, CVX, JNJ, PFE, MRK, PG, KO, PEP,
+            WMT, HD, MCD, DIS, V, MA, UNH, CSCO, INTC, ORCL, IBM, CAT, BA, GE, MMM, T, VZ, NKE, COST]
+  start: "2012-01-01"
+strategy:
+  ref: momentum
+  options: {long_short: true, min_assets: 10}
+  grid:
+    lookback: [63, 126, 252]
+    skip: [0, 21]
+    quantile: [0.2, 0.3]
+    rebalance: [5, 21]
+costs: {cost_bps: 2.0, delay: 1, borrow_bps: 50}
+execution: {backend: process}
+validation: {train_bars: 756, test_bars: 126}
+gates: {min_oos_sharpe: 0.3, min_dsr: 0.5, max_pbo: 0.5, max_oos_drawdown: -0.35}
