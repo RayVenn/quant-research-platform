@@ -2,6 +2,6 @@
   "name": "quantlab",
   "image": "mcr.microsoft.com/devcontainers/python:3.12",
   "features": {"ghcr.io/devcontainers/features/docker-in-docker:2": {}},
-  "postCreateCommand": "pip install uv && uv sync --extra ray && make demo",
+  "postCreateCommand": "pip install uv && uv sync --extra ray",
   "forwardPorts": [8265]
 }
